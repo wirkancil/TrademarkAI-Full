@@ -1,0 +1,33 @@
+# Core FastAPI
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# PDF Processing
+PyPDF2==3.0.1
+pdfplumber==0.10.0
+
+# ML & Data Science
+scikit-learn==1.3.2
+numpy==1.24.3
+pandas==2.1.4
+
+# Vector Database
+pinecone>=6.0.0
+
+# OpenAI
+openai==1.3.7
+
+# Text Processing
+python-Levenshtein==0.23.0
+jellyfish==1.0.1
+
+# Environment & Config
+python-dotenv==1.0.0
+pydantic==2.5.0
+
+# Logging
+loguru==0.7.2
+
+# File Upload
+aiofiles==23.2.1
