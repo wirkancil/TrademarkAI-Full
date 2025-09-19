@@ -13,9 +13,10 @@ class Settings(BaseSettings):
     debug: bool = True
     
     # File Upload Settings
-    max_file_size: int = 10 * 1024 * 1024  # 10MB
+    max_file_size: int = 50 * 1024 * 1024  # 50MB (increased from 10MB)
     allowed_extensions: str = ".pdf"  # Will be parsed to list
     upload_dir: str = "uploads"
+    upload_timeout: int = 300  # 5 minutes timeout for upload processing
     
     # CORS Settings
     cors_origins: str = "http://localhost:3000,http://localhost:5173,http://localhost:5174"  # Will be parsed to list

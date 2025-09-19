@@ -1,5 +1,5 @@
-# Core FastAPI
-fastapi==0.104.1
+# Core FastAPI - Compatible versions (no conflict)
+fastapi==0.103.2
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
@@ -13,23 +13,40 @@ numpy==1.24.3
 pandas==2.1.4
 
 # Vector Database
-pinecone>=6.0.0
+pinecone-client==2.2.4
 
 # OpenAI
-openai>=1.3.7
-httpx>=0.27.0
+openai==1.3.7
+httpx==0.25.2
 
 # Text Processing
 python-Levenshtein==0.23.0
 jellyfish==1.0.1
 
-# Environment & Config
+# Environment & Config - Pydantic v1 compatible
 python-dotenv==1.0.0
-pydantic==2.5.0
-pydantic-settings==2.2.1
+pydantic==1.10.13
+pydantic-settings==2.0.3
 
 # Logging
 loguru==0.7.2
 
-# File Upload
+# Additional Environment Dependencies
+requests==2.31.0
 aiofiles==23.2.1
+asyncio==3.4.3
+typing-extensions==4.8.0
+
+# Security & Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Database Support
+sqlalchemy==2.0.23
+alembic==1.13.0
+
+# Date & Time
+python-dateutil==2.8.2
+
+# File Processing
+mimetypes==0.1.0

@@ -27,7 +27,9 @@ allowed_origins = [
     "http://localhost:5174",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174"
+    "http://127.0.0.1:5174",
+    "https://trademark.ai-agentic.tech",
+    "http://trademark.ai-agentic.tech"
 ]
 
 app.add_middleware(
@@ -88,20 +90,37 @@ async def upload_pdf(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Process PDF
-        response = await trademark_service.process_pdf(file_path, file.filename)
-        return response
+        # Process PDF with timeout handling
+        try:
+            response = await asyncio.wait_for(
+                trademark_service.process_pdf(file_path, file.filename),
+                timeout=300.0  # 5 minutes timeout
+            )
+            return response
+        except asyncio.TimeoutError:
+            logger.error(f"PDF processing timeout for file: {file.filename}")
+            raise HTTPException(
+                status_code=408,
+                detail="PDF processing timeout. File might be too large or complex. Please try with a smaller file."
+            )
         
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        if file_path.exists():
+            file_path.unlink(missing_ok=True)
+        raise
     except Exception as e:
         # Clean up file on error
         if file_path.exists():
             file_path.unlink(missing_ok=True)
+        logger.error(f"Error processing PDF {file.filename}: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Error processing PDF: {str(e)}"
         )
 
 @app.post("/upload/stream")
+@app.get("/upload/stream")  # Handle GET requests to prevent 405 error
 async def upload_pdf_stream(file: UploadFile = File(...)):
     """Upload and process PDF file with streaming progress updates"""
     
@@ -133,12 +152,32 @@ async def upload_pdf_stream(file: UploadFile = File(...)):
     async def generate_stream():
         file_path = None
         try:
-            # Generate unique filename
-            unique_filename = f"{uuid.uuid4()}_{file.filename}"
-            file_path = Path(settings.upload_dir) / unique_filename
+            # Set up connection monitoring
+            import asyncio
+            from contextlib import asynccontextmanager
             
-            # Step 1: Save file (10%)
-            yield f"data: {json.dumps({'progress': 10, 'status': 'Saving file...'})}\n\n"
+            @asynccontextmanager
+            async def connection_manager():
+                try:
+                    yield
+                except asyncio.CancelledError:
+                    logger.warning("Client disconnected during streaming")
+                    raise
+                except GeneratorExit:
+                    logger.warning("Generator closed during streaming")
+                    raise
+                except Exception as e:
+                    logger.error(f"Connection error during streaming: {str(e)}")
+                    raise
+            
+            async with connection_manager():
+                # Generate unique filename
+                unique_filename = f"{uuid.uuid4()}_{file.filename}"
+                file_path = Path(settings.upload_dir) / unique_filename
+                
+                # Step 1: Save file (10%)
+                yield f"data: {json.dumps({'progress': 10, 'status': 'Saving file...'})}\n\n"
+                await asyncio.sleep(0.1)  # Small delay to ensure proper streaming
             
             try:
                 # Save the file content we read earlier
@@ -156,6 +195,7 @@ async def upload_pdf_stream(file: UploadFile = File(...)):
                 
                 # Step 2a: Extract text and parse trademarks (30%)
                 yield f"data: {json.dumps({'progress': 30, 'status': 'Extracting text and trademarks...'})}\n\n"
+                await asyncio.sleep(0.1)  # Small delay to ensure proper streaming
                 
                 from .pdf_processor import PDFProcessor
                 pdf_processor = PDFProcessor()
@@ -166,9 +206,11 @@ async def upload_pdf_stream(file: UploadFile = File(...)):
                     return
                 
                 yield f"data: {json.dumps({'progress': 50, 'status': 'Found trademarks'})}\n\n"
+                await asyncio.sleep(0.1)  # Small delay to ensure proper streaming
                 
                 # Step 2b: Generate embeddings (70%)
                 yield f"data: {json.dumps({'progress': 70, 'status': 'Generating embeddings...'})}\n\n"
+                await asyncio.sleep(0.1)  # Small delay to ensure proper streaming
                 
                 from .embedding_service import EmbeddingService
                 embedding_service = EmbeddingService()
@@ -177,6 +219,7 @@ async def upload_pdf_stream(file: UploadFile = File(...)):
                 
                 # Step 2c: Upsert to Pinecone (90%)
                 yield f"data: {json.dumps({'progress': 90, 'status': 'Storing in database...'})}\n\n"
+                await asyncio.sleep(0.1)  # Small delay to ensure proper streaming
                 
                 from .pinecone_service import PineconeService
                 pinecone_service = PineconeService()
@@ -209,9 +252,17 @@ async def upload_pdf_stream(file: UploadFile = File(...)):
         generate_stream(),
         media_type="text/plain",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"  # Disable Nginx buffering
+            "X-Accel-Buffering": "no",  # Disable Nginx buffering
+            "X-Content-Type-Options": "nosniff",  # Prevent MIME type sniffing
+            "Transfer-Encoding": "chunked",  # Explicitly set chunked encoding
+            "Content-Type": "text/plain; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
         }
     )
 

@@ -52,18 +52,24 @@ class PineconeService:
             raise
     
     def upsert_trademarks(self, trademarks: List[IndividualTrademark], embeddings: List[List[float]]) -> dict:
-        """Upsert individual trademarks to Pinecone (NEW STRATEGY) with batching and error handling"""
+        """Upsert individual trademarks to Pinecone (NEW STRATEGY) with optimized batching and timeout handling"""
         if len(trademarks) != len(embeddings):
             raise ValueError("Number of trademarks must match number of embeddings")
         
-        batch_size = 100
+        # Reduced batch size for better timeout handling
+        batch_size = 50  # Reduced from 100 to 50
         total_processed = 0
         failed_count = 0
         failed_ids = []
+        max_retries = 3
+        
+        logger.info(f"Starting upsert of {len(trademarks)} trademarks in batches of {batch_size}")
         
         for i in range(0, len(trademarks), batch_size):
             batch_trademarks = trademarks[i:i + batch_size]
             batch_embeddings = embeddings[i:i + batch_size]
+            batch_num = i//batch_size + 1
+            total_batches = (len(trademarks) + batch_size - 1)//batch_size
             
             vectors = []
             for trademark, embedding in zip(batch_trademarks, batch_embeddings):
@@ -86,20 +92,41 @@ class PineconeService:
                 }
                 vectors.append(vector)
             
-            try:
-                self.index.upsert(vectors=vectors)
-                total_processed += len(vectors)
-                logger.info(f"Processed batch {i//batch_size + 1}/{(len(trademarks) + batch_size - 1)//batch_size}: {len(vectors)} trademarks")
-            except Exception as e:
-                logger.error(f"Error upserting batch {i//batch_size + 1}: {str(e)}")
-                failed_count += len(vectors)
-                failed_ids.extend([v["id"] for v in vectors])
-                # Continue with next batch instead of failing completely
-                continue
+            # Retry mechanism for each batch
+            retry_count = 0
+            batch_success = False
+            
+            while retry_count < max_retries and not batch_success:
+                try:
+                    logger.info(f"Upserting batch {batch_num}/{total_batches} (attempt {retry_count + 1}): {len(vectors)} trademarks")
+                    self.index.upsert(vectors=vectors)
+                    total_processed += len(vectors)
+                    batch_success = True
+                    logger.info(f"✅ Batch {batch_num}/{total_batches} completed successfully")
+                    
+                    # Add small delay between batches to avoid rate limits
+                    if batch_num < total_batches:
+                        import time
+                        time.sleep(0.5)  # 500ms delay between batches
+                        
+                except Exception as e:
+                    retry_count += 1
+                    logger.warning(f"⚠️ Batch {batch_num} attempt {retry_count} failed: {str(e)}")
+                    
+                    if retry_count < max_retries:
+                        # Exponential backoff
+                        import time
+                        delay = min(2 ** retry_count, 10)  # Max 10 seconds
+                        logger.info(f"Retrying in {delay} seconds...")
+                        time.sleep(delay)
+                    else:
+                        logger.error(f"❌ Batch {batch_num} failed after {max_retries} attempts")
+                        failed_count += len(vectors)
+                        failed_ids.extend([v["id"] for v in vectors])
         
-        logger.info(f"Successfully upserted {total_processed} individual trademarks to Pinecone in total")
+        logger.info(f"Upsert completed: {total_processed} successful, {failed_count} failed")
         if failed_count > 0:
-            logger.warning(f"Failed to upsert {failed_count} trademarks")
+            logger.warning(f"Failed trademark IDs (first 10): {failed_ids[:10]}")
         
         return {
             "success": True,

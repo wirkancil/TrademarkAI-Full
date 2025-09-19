@@ -68,11 +68,12 @@ class TrademarkService:
         return total_chunks
     
     async def process_pdf(self, file_path: Path, filename: str) -> UploadResponse:
-        """Process PDF file dengan strategi baru: satu merek = satu vector"""
+        """Process PDF file dengan strategi baru: satu merek = satu vector dengan optimasi timeout"""
         try:
             logger.info(f"Processing PDF: {filename}")
             
             # Step 1: Extract text and parse individual trademarks (NEW STRATEGY)
+            logger.info("Step 1: Extracting trademarks from PDF...")
             text, trademarks = self.pdf_processor.extract_trademarks_list(file_path)
             
             if not trademarks:
@@ -85,12 +86,28 @@ class TrademarkService:
                 logger.info(f"Sample trademark IDs: {[tm.trademarkId for tm in trademarks[:5]]}")
                 logger.info(f"Duplicate check - Total: {len(trademarks)}, Unique IDs: {len(set(tm.trademarkId for tm in trademarks))}")
             
-            # Step 2: Generate embeddings untuk setiap merek
+            # Step 2: Generate embeddings untuk setiap merek dengan progress logging
+            logger.info("Step 2: Generating embeddings...")
             trademark_texts = [tm.get_search_text() for tm in trademarks]
-            embeddings = self.embedding_service.generate_embeddings(trademark_texts)
             
-            # Step 3: Upsert individual trademarks to Pinecone (NEW STRATEGY)
-            upsert_result = self.pinecone_service.upsert_trademarks(trademarks, embeddings)
+            # Process embeddings in smaller batches to avoid memory issues
+            embedding_batch_size = 100
+            all_embeddings = []
+            
+            for i in range(0, len(trademark_texts), embedding_batch_size):
+                batch_texts = trademark_texts[i:i + embedding_batch_size]
+                batch_num = i//embedding_batch_size + 1
+                total_embedding_batches = (len(trademark_texts) + embedding_batch_size - 1)//embedding_batch_size
+                
+                logger.info(f"Generating embeddings batch {batch_num}/{total_embedding_batches}: {len(batch_texts)} texts")
+                batch_embeddings = self.embedding_service.generate_embeddings(batch_texts)
+                all_embeddings.extend(batch_embeddings)
+            
+            logger.info(f"Generated {len(all_embeddings)} embeddings successfully")
+            
+            # Step 3: Upsert individual trademarks to Pinecone (NEW STRATEGY) with progress logging
+            logger.info("Step 3: Storing trademarks in Pinecone database...")
+            upsert_result = self.pinecone_service.upsert_trademarks(trademarks, all_embeddings)
             
             # Log detailed results
             logger.info(f"Upsert result: {upsert_result['total_processed']} successful, {upsert_result['failed_count']} failed")
@@ -99,6 +116,7 @@ class TrademarkService:
             
             # Clean up uploaded file
             file_path.unlink(missing_ok=True)
+            logger.info("PDF processing completed successfully")
             
             return UploadResponse(
                 success=True,
@@ -126,7 +144,7 @@ class TrademarkService:
             pinecone_results = self.pinecone_service.query_similar_vectors(
                 query_embedding,
                 top_k=request.topK,
-                filter_dict={"type": {"$eq": "individual_trademark"}}
+                filter_dict={"type": "individual_trademark"}
             )
             
             # Step 3: Calculate detailed similarities
