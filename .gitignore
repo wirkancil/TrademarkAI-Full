@@ -30,3 +30,40 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Docker
+*.env
+.Dockerfile
+docker-compose.*.yml
+certbot/
+nginx/ssl/
+
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+.coveragerc
+.pytest_cache/
+.pytest_cache_/
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+*.egg
+*.manifest
+*.spec
+
+# IDE
+.idea/
+*.sublime-project
+*.sublime-workspace
