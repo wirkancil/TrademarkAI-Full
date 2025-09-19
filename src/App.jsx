@@ -22,7 +22,8 @@ const App = () => {
   const [uploadResult, setUploadResult] = useState('');
   const [isDragActive, setIsDragActive] = useState(false);
 
-  const API_BASE_URL = 'http://localhost:8004';
+  // Use relative URLs to work with nginx proxy
+  const API_BASE_URL = '/api';
 
   // Search functionality
   const handleSearch = useCallback(async () => {
@@ -55,7 +56,7 @@ const App = () => {
     } finally {
       setIsSearching(false);
     }
-  }, [searchQuery, topK, API_BASE_URL]);
+  }, [searchQuery, topK]);
 
   // Similarity analysis functionality
   const handleSimilarityAnalysis = useCallback(async () => {
@@ -92,7 +93,7 @@ const App = () => {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [similarityQuery, topK, includePhonetic, API_BASE_URL]);
+  }, [similarityQuery, topK, includePhonetic]);
 
   // File upload functionality
   const handleFileSelect = useCallback((file) => {

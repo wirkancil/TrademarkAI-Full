@@ -1,0 +1,2 @@
+# Tambahkan ke crontab untuk pembaruan sertifikat otomatis
+echo "0 12 * * * /usr/bin/docker-compose -f /app/docker-compose.yml run --rm certbot renew --webroot --webroot-path=/var/www/certbot && /usr/bin/docker-compose -f /app/docker-compose.yml restart nginx" >> /etc/crontab
